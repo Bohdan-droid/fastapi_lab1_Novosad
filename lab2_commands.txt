@@ -1,0 +1,5 @@
+docker compose up -d --build
+docker ps
+docker exec -it lab1_fastapinovosad-web-1 bash
+pip list
+exit
