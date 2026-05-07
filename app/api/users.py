@@ -5,19 +5,34 @@ from sqlalchemy import select
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.user import UserCreate, UserResponse
+from app.core.security import get_password_hash  # Імпортуємо хешування
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-# 1. CREATE: Створення користувача
+# 1. CREATE: Реєстрація користувача (тепер з паролем)
 @router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
+async def create_user(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     # Перевірка, чи не зайнятий username
-    result = await db.execute(select(User).where(User.username == user.username))
+    result = await db.execute(select(User).where(User.username == user_data.username))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Username already exists")
 
-    new_user = User(username=user.username, email=user.email)
+    # Перевірка, чи не зайнятий email
+    result_email = await db.execute(select(User).where(User.email == user_data.email))
+    if result_email.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Email already exists")
+
+    # Хешуємо пароль перед збереженням у базу
+    hashed_pwd = get_password_hash(user_data.password)
+
+    # Створюємо модель користувача, передаючи хеш замість чистого пароля
+    new_user = User(
+        username=user_data.username,
+        email=user_data.email,
+        hashed_password=hashed_pwd
+    )
+
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
@@ -41,7 +56,7 @@ async def read_user(user_id: int, db: AsyncSession = Depends(get_db)):
     return user
 
 
-# 4. UPDATE: Оновлення користувача
+# 4. UPDATE: Оновлення користувача (тепер також враховуємо пароль, якщо потрібно)
 @router.put("/{user_id}", response_model=UserResponse)
 async def update_user(user_id: int, user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.id == user_id))
@@ -51,6 +66,9 @@ async def update_user(user_id: int, user_data: UserCreate, db: AsyncSession = De
 
     user.username = user_data.username
     user.email = user_data.email
+    # Оновлюємо пароль (теж хешуємо)
+    user.hashed_password = get_password_hash(user_data.password)
+
     await db.commit()
     await db.refresh(user)
     return user
