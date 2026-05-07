@@ -25,7 +25,7 @@ async def login(
     # 3. Генеруємо JWT токен
     token = create_access_token(data={"sub": user.email})
 
-    # 4. Встановлюємо КУКІ (як у завданні)
+    # 4. Встановлюємо КУКІ
     response.set_cookie(
         key="access_token",
         value=token,

@@ -1,11 +1,13 @@
 from datetime import datetime, timedelta, timezone
 from jose import jwt
 from passlib.context import CryptContext
+from app.core.config import settings  # Додаємо імпорт налаштувань
 
 # Налаштування хешування
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-SECRET_KEY = "SUPER_SECRET_KEY_FOR_BASKETBALL_APP"
+# Тепер секретний ключ береться безпечно з .env через config.py
+SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
