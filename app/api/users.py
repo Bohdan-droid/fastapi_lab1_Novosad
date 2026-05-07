@@ -1,51 +1,68 @@
-from fastapi import APIRouter, HTTPException
-from app.schemas.user import UserCreate, UserUpdate, UserResponse
-from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
-router = APIRouter(prefix="/users", tags=["Users"])
+from app.db.session import get_db
+from app.models.user import User
+from app.schemas.user import UserCreate, UserResponse
 
-# Емуляція бази даних
-fake_users_db = {}
-current_id = 1
+router = APIRouter(prefix="/users", tags=["users"])
 
 
-@router.post("/", response_model=UserResponse)
-def create_user(user: UserCreate):
-    global current_id
-    new_user = {"id": current_id, **user.dict()}
-    fake_users_db[current_id] = new_user
-    current_id += 1
+# 1. CREATE: Створення користувача
+@router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
+    # Перевірка, чи не зайнятий username
+    result = await db.execute(select(User).where(User.username == user.username))
+    if result.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Username already exists")
+
+    new_user = User(username=user.username, email=user.email)
+    db.add(new_user)
+    await db.commit()
+    await db.refresh(new_user)
     return new_user
 
 
-@router.get("/", response_model=List[UserResponse])
-def get_all_users():
-    return list(fake_users_db.values())
+# 2. READ: Отримання всіх користувачів
+@router.get("/", response_model=list[UserResponse])
+async def read_users(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User))
+    return list(result.scalars().all())
 
 
+# 3. READ: Отримання одного користувача за ID
 @router.get("/{user_id}", response_model=UserResponse)
-def get_user(user_id: int):
-    if user_id not in fake_users_db:
+async def read_user(user_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return fake_users_db[user_id]
+    return user
 
 
+# 4. UPDATE: Оновлення користувача
 @router.put("/{user_id}", response_model=UserResponse)
-def update_user(user_id: int, user_update: UserUpdate):
-    if user_id not in fake_users_db:
+async def update_user(user_id: int, user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    stored_user_data = fake_users_db[user_id]
-    update_data = user_update.dict(exclude_unset=True)
-    updated_user = {**stored_user_data, **update_data}
+    user.username = user_data.username
+    user.email = user_data.email
+    await db.commit()
+    await db.refresh(user)
+    return user
 
-    fake_users_db[user_id] = updated_user
-    return updated_user
 
-
-@router.delete("/{user_id}")
-def delete_user(user_id: int):
-    if user_id not in fake_users_db:
+# 5. DELETE: Видалення користувача
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(user_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    del fake_users_db[user_id]
-    return {"message": "User deleted successfully"}
+
+    await db.delete(user)
+    await db.commit()
