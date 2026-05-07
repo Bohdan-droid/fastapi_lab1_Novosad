@@ -1,16 +1,15 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, EmailStr, ConfigDict
 
-class UserBase(BaseModel):
-    name: str
-    email: str
+# Схема для отримання даних від клієнта (POST, PUT)
+class UserCreate(BaseModel):
+    username: str
+    email: EmailStr
 
-class UserCreate(UserBase):
-    pass
-
-class UserUpdate(BaseModel):
-    name: Optional[str] = None
-    email: Optional[str] = None
-
-class UserResponse(UserBase):
+# Схема для відправки даних клієнту (GET)
+class UserResponse(BaseModel):
     id: int
+    username: str
+    email: EmailStr
+
+    # Дозволяє Pydantic читати дані з моделей SQLAlchemy
+    model_config = ConfigDict(from_attributes=True)
